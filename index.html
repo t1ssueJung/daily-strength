@@ -7,6 +7,13 @@
 <title>하루 10분 근력운동</title>
 <style>
 *{box-sizing:border-box}body{margin:0;background:#f6f3ea;color:#17243b;font:1rem/1.55 system-ui,sans-serif}main{margin:12vh auto;width:min(90%,530px);padding:clamp(22px,6vw,48px);border:2px solid;border-radius:23px;box-shadow:6px 6px #17243b;background:#f9edcf}h1{line-height:1.15;font-size:clamp(1.85rem,7vw,3rem);margin:0}h1 span{color:#a43b28}p{color:#495362}a{display:inline-block;padding:10px 16px;border-radius:9px;background:#18263f;color:white;font-weight:700}a:focus-visible{outline:3px solid #a43b28;outline-offset:3px}
+[hidden]{display:none!important}
+label{display:block;margin-bottom:5px;font-weight:700}
+input{display:block;width:100%;padding:10px;margin-bottom:10px;border:1px solid #6c7280;border-radius:8px;font:inherit}
+button{padding:10px 16px;border:0;border-radius:9px;background:#18263f;color:white;font:inherit;font-weight:700;cursor:pointer}
+:is(input,button):focus-visible{outline:3px solid #a43b28;outline-offset:3px}
+#invite-error{color:#8c2e20}
+#invite-error:empty{margin:0}
 </style>
 </head>
 <body>
@@ -14,25 +21,61 @@
   <h1>하루 10분,<br><span>근력운동 체크</span></h1>
   <p id="message">관리자가 공유한 참가자 초대 링크를 열어 주세요.</p>
   <a id="open" hidden rel="noreferrer">운동 체크 열기</a>
+  <form id="invite-form">
+    <label for="invite">참가자 링크</label>
+    <input id="invite" type="url" autocomplete="off" required placeholder="https://script.google.com/…?room=…" aria-describedby="invite-error">
+    <button type="submit">운동 체크 열기</button>
+  </form>
+  <p id="invite-error" role="status"></p>
 </main>
 <script>
-const app = new URLSearchParams(location.hash.slice(1)).get('app');
-if (app) {
+const form = document.getElementById('invite-form');
+const input = document.getElementById('invite');
+const link = document.getElementById('open');
+const message = document.getElementById('message');
+const error = document.getElementById('invite-error');
+
+function participantUrl(value) {
   try {
-    const target = new URL(app);
-    const room = target.searchParams.get('room');
-    if (target.origin !== 'https://script.google.com' || !target.pathname.endsWith('/exec') ||
-        !/^[a-f0-9-]{36}$/i.test(room) || target.searchParams.has('admin')) {
-      throw new Error('Invalid participant link');
+    const target = new URL(value.trim());
+    const rooms = target.searchParams.getAll('room');
+    const uuid = /^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
+    if (target.origin === 'https://script.google.com' && target.pathname.endsWith('/exec') &&
+        !target.username && !target.password && !target.searchParams.has('admin') &&
+        rooms.length === 1 && uuid.test(rooms[0])) {
+      return target.href;
     }
-    const link = document.getElementById('open');
-    link.href = target.href;
-    link.hidden = false;
-    document.getElementById('message').textContent = '체크표에서 내 이름과 날짜가 만나는 칸을 눌러 주세요.';
   } catch {
-    document.getElementById('message').textContent = '참가자 초대 링크를 확인해 주세요.';
+    // 입력이 주소 형식이 아니면 아래 안내를 표시합니다.
   }
+  return null;
 }
+
+function showInvite() {
+  const app = new URLSearchParams(location.hash.slice(1)).get('app');
+  const target = app && participantUrl(app);
+  form.hidden = Boolean(target);
+  link.hidden = !target;
+  if (target) link.href = target;
+  else link.removeAttribute('href');
+  message.textContent = target
+    ? '체크표에서 내 이름과 날짜가 만나는 칸을 눌러 주세요.'
+    : '관리자가 공유한 참가자 링크를 붙여넣어 주세요.';
+  error.textContent = app && !target ? '초대 주소를 확인하거나 참가자 링크를 아래에 붙여넣어 주세요.' : '';
+}
+
+form.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const target = participantUrl(input.value);
+  if (target) {
+    location.assign(target);
+  } else {
+    error.textContent = '끝에 ?room=과 초대 코드가 붙은 참가자 링크를 넣어 주세요.';
+    input.focus();
+  }
+});
+window.addEventListener('hashchange', showInvite);
+showInvite();
 </script>
 </body>
 </html>
