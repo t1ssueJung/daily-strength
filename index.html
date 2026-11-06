@@ -13,6 +13,9 @@ input{display:block;width:100%;padding:10px;margin-bottom:10px;border:1px solid 
 button{padding:10px 16px;border:0;border-radius:9px;background:#18263f;color:white;font:inherit;font-weight:700;cursor:pointer}
 :is(input,button):focus-visible{outline:3px solid #a43b28;outline-offset:3px}
 #invite-error{color:#8c2e20}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.secondary{background:transparent;border:1px solid #18263f;color:#18263f}
+#share-status:empty{margin:0}
 #invite-error:empty{margin:0}
 </style>
 </head>
@@ -21,6 +24,12 @@ button{padding:10px 16px;border:0;border-radius:9px;background:#18263f;color:whi
   <h1>하루 10분,<br><span>근력운동 체크</span></h1>
   <p id="message">관리자가 공유한 참가자 초대 링크를 열어 주세요.</p>
   <a id="open" hidden rel="noreferrer">운동 체크 열기</a>
+  <div id="saved-actions" class="actions" hidden>
+    <button id="copy-invite" class="secondary" type="button">공유 주소 복사</button>
+    <button id="change-invite" class="secondary" type="button">다른 참가자 링크 사용</button>
+  </div>
+  <p id="share-status" role="status"></p>
+  <input id="share-address" type="url" readonly hidden aria-label="복사할 공유 주소">
   <form id="invite-form">
     <label for="invite">참가자 링크</label>
     <input id="invite" type="url" autocomplete="off" required placeholder="https://script.google.com/…?room=…" aria-describedby="invite-error">
@@ -34,6 +43,27 @@ const input = document.getElementById('invite');
 const link = document.getElementById('open');
 const message = document.getElementById('message');
 const error = document.getElementById('invite-error');
+const actions = document.getElementById('saved-actions');
+const shareStatus = document.getElementById('share-status');
+const shareAddress = document.getElementById('share-address');
+const storageKey = 'daily-strength:participant:' + location.pathname;
+
+function savedInvite() {
+  try {
+    return localStorage.getItem(storageKey) || '';
+  } catch {
+    return '';
+  }
+}
+
+function rememberInvite(value) {
+  try {
+    if (value) localStorage.setItem(storageKey, value);
+    else localStorage.removeItem(storageKey);
+  } catch {
+    // 브라우저 저장이 제한되어도 링크는 열 수 있습니다.
+  }
+}
 
 function participantUrl(value) {
   try {
@@ -53,8 +83,12 @@ function participantUrl(value) {
 
 function showInvite() {
   const app = new URLSearchParams(location.hash.slice(1)).get('app');
-  const target = app && participantUrl(app);
+  const target = participantUrl(app ?? savedInvite());
+  if (app && target) rememberInvite(target);
   form.hidden = Boolean(target);
+  actions.hidden = !target;
+  shareStatus.textContent = '';
+  shareAddress.hidden = true;
   link.hidden = !target;
   if (target) link.href = target;
   else link.removeAttribute('href');
@@ -68,12 +102,36 @@ form.addEventListener('submit', (event) => {
   event.preventDefault();
   const target = participantUrl(input.value);
   if (target) {
+    rememberInvite(target);
     location.assign(target);
   } else {
     error.textContent = '끝에 ?room=과 초대 코드가 붙은 참가자 링크를 넣어 주세요.';
     input.focus();
   }
 });
+document.getElementById('change-invite').addEventListener('click', () => {
+  rememberInvite(null);
+  history.replaceState(null, '', location.pathname + location.search);
+  input.value = '';
+  showInvite();
+  input.focus();
+});
+
+document.getElementById('copy-invite').addEventListener('click', async () => {
+  const address = new URL(location.pathname, location.origin);
+  address.hash = new URLSearchParams({ app: link.href }).toString();
+  try {
+    await navigator.clipboard.writeText(address.href);
+    shareAddress.hidden = true;
+    shareStatus.textContent = '공유 주소를 복사했어요.';
+  } catch {
+    shareAddress.value = address.href;
+    shareAddress.hidden = false;
+    shareAddress.select();
+    shareStatus.textContent = '아래 주소를 복사해 반에 공유하세요.';
+  }
+});
+
 window.addEventListener('hashchange', showInvite);
 showInvite();
 </script>
